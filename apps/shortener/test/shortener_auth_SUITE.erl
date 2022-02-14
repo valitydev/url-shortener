@@ -26,7 +26,7 @@
 
 -define(config(Key, C), (element(2, lists:keyfind(Key, 1, C)))).
 
--spec all() -> [test_case_name()].
+-spec all() -> [{atom(), test_case_name()} | test_case_name()].
 all() ->
     [
         {group, general}
@@ -95,7 +95,7 @@ end_per_suite(C) ->
 init_per_testcase(_Name, C) ->
     shortener_ct_helper:with_test_sup(C).
 
--spec end_per_testcase(test_case_name(), config()) -> config().
+-spec end_per_testcase(test_case_name(), config()) -> ok.
 end_per_testcase(_Name, C) ->
     shortener_ct_helper:stop_test_sup(C),
     ok.
@@ -116,7 +116,7 @@ failed_authorization(C) ->
     {ok, 401, _, _} = get_shortened_url(<<"42">>, C1).
 
 insufficient_permissions(C) ->
-    shortener_ct_helper:mock_services(
+    _ = shortener_ct_helper:mock_services(
         [
             {bouncer, fun('Judge', _) ->
                 {ok, #bdcs_Judgement{
@@ -133,7 +133,7 @@ insufficient_permissions(C) ->
     {ok, 403, _, _} = get_shortened_url(<<"42">>, C1).
 
 readonly_permissions(C) ->
-    shortener_ct_helper:mock_services(
+    _ = shortener_ct_helper:mock_services(
         [
             {bouncer, fun('Judge', {_RulesetID, Fragments}) ->
                 DecodedFragment = decode_shortener(Fragments),
@@ -162,7 +162,7 @@ readonly_permissions(C) ->
     {ok, 403, _, _} = delete_shortened_url(ID, C1).
 
 other_subject_delete(C) ->
-    shortener_ct_helper:mock_services(
+    _ = shortener_ct_helper:mock_services(
         [
             {bouncer, fun('Judge', {_RulesetID, Fragments}) ->
                 DecodedFragment = decode_shortener(Fragments),
@@ -208,7 +208,7 @@ other_subject_delete(C) ->
     {<<"location">>, SourceUrl} = lists:keyfind(<<"location">>, 1, Headers).
 
 other_subject_read(C) ->
-    shortener_ct_helper:mock_services(
+    _ = shortener_ct_helper:mock_services(
         [
             {bouncer, fun('Judge', {_RulesetID, Fragments}) ->
                 DecodedFragment = decode_shortener(Fragments),
@@ -276,19 +276,19 @@ construct_shortener_acl(Permissions) ->
 %%
 
 shorten_url(ShortenedUrlParams, C) ->
-    swag_client_shortener_api:shorten_url(
+    swag_client_ushort_shortener_api:shorten_url(
         ?config(api_endpoint, C),
         append_common_params(#{body => ShortenedUrlParams}, C)
     ).
 
 delete_shortened_url(ID, C) ->
-    swag_client_shortener_api:delete_shortened_url(
+    swag_client_ushort_shortener_api:delete_shortened_url(
         ?config(api_endpoint, C),
         append_common_params(#{binding => #{<<"shortenedUrlID">> => ID}}, C)
     ).
 
 get_shortened_url(ID, C) ->
-    swag_client_shortener_api:get_shortened_url(
+    swag_client_ushort_shortener_api:get_shortened_url(
         ?config(api_endpoint, C),
         append_common_params(#{binding => #{<<"shortenedUrlID">> => ID}}, C)
     ).

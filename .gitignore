@@ -12,15 +12,13 @@ rel/example_project
 
 .DS_Store
 
-# generated
-apps/swag_server
-apps/swag_client
-
 # rebar
 /_checkouts/
 
 # containerization
 \#*
 .\#*
-Dockerfile
-docker-compose.yml
+
+# make stuff
+/.image.*
+Makefile.env

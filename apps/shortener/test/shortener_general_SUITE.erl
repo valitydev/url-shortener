@@ -112,7 +112,7 @@ end_per_suite(C) ->
 init_per_testcase(_Name, C) ->
     shortener_ct_helper:with_test_sup(C).
 
--spec end_per_testcase(test_case_name(), config()) -> config().
+-spec end_per_testcase(test_case_name(), config()) -> ok.
 end_per_testcase(_Name, C) ->
     shortener_ct_helper:stop_test_sup(C),
     ok.
@@ -126,7 +126,7 @@ end_per_testcase(_Name, C) ->
 -spec always_unique_url(config()) -> _.
 
 successful_redirect(C) ->
-    shortener_ct_helper:mock_services(
+    _ = shortener_ct_helper:mock_services(
         [
             {bouncer, fun('Judge', _) ->
                 {ok, #bdcs_Judgement{
@@ -145,7 +145,7 @@ successful_redirect(C) ->
     {<<"location">>, SourceUrl} = lists:keyfind(<<"location">>, 1, Headers).
 
 successful_delete(C) ->
-    shortener_ct_helper:mock_services(
+    _ = shortener_ct_helper:mock_services(
         [
             {bouncer, fun('Judge', _) ->
                 {ok, #bdcs_Judgement{
@@ -163,7 +163,7 @@ successful_delete(C) ->
     {ok, 404, _, _} = hackney:request(get, ShortUrl).
 
 fordidden_source_url(C) ->
-    shortener_ct_helper:mock_services(
+    _ = shortener_ct_helper:mock_services(
         [
             {bouncer, fun('Judge', _) ->
                 {ok, #bdcs_Judgement{
@@ -181,7 +181,7 @@ fordidden_source_url(C) ->
     {ok, 201, _, #{}} = shorten_url(construct_params(<<"ftp://ftp.hp.com/pub/hpcp/newsletter_july2003">>), C1).
 
 url_expired(C) ->
-    shortener_ct_helper:mock_services(
+    _ = shortener_ct_helper:mock_services(
         [
             {bouncer, fun('Judge', _) ->
                 {ok, #bdcs_Judgement{
@@ -200,7 +200,7 @@ url_expired(C) ->
     {ok, 404, _, _} = hackney:request(get, ShortUrl).
 
 always_unique_url(C) ->
-    shortener_ct_helper:mock_services(
+    _ = shortener_ct_helper:mock_services(
         [
             {bouncer, fun('Judge', _) ->
                 {ok, #bdcs_Judgement{
@@ -228,7 +228,7 @@ always_unique_url(C) ->
 -spec supported_cors_header(config()) -> _.
 
 unsupported_cors_method(C) ->
-    shortener_ct_helper:mock_services(
+    _ = shortener_ct_helper:mock_services(
         [
             {bouncer, fun('Judge', _) ->
                 {ok, #bdcs_Judgement{
@@ -247,7 +247,7 @@ unsupported_cors_method(C) ->
     false = lists:member(<<"access-control-allow-methods">>, Headers).
 
 supported_cors_method(C) ->
-    shortener_ct_helper:mock_services(
+    _ = shortener_ct_helper:mock_services(
         [
             {bouncer, fun('Judge', _) ->
                 {ok, #bdcs_Judgement{
@@ -268,7 +268,7 @@ supported_cors_method(C) ->
     Allowed = binary:split(Returned, <<",">>, [global]).
 
 supported_cors_header(C) ->
-    shortener_ct_helper:mock_services(
+    _ = shortener_ct_helper:mock_services(
         [
             {bouncer, fun('Judge', _) ->
                 {ok, #bdcs_Judgement{
@@ -294,7 +294,7 @@ supported_cors_header(C) ->
     [_ | Allowed] = binary:split(Returned, <<",">>, [global]).
 
 unsupported_cors_header(C) ->
-    shortener_ct_helper:mock_services(
+    _ = shortener_ct_helper:mock_services(
         [
             {bouncer, fun('Judge', _) ->
                 {ok, #bdcs_Judgement{
@@ -340,7 +340,7 @@ woody_timeout_test(C) ->
             <<"http://invalid_url:8022/v1/automaton">>
         )
     ),
-    shortener_ct_helper:mock_services(
+    _ = shortener_ct_helper:mock_services(
         [
             {bouncer, fun('Judge', _) ->
                 {ok, #bdcs_Judgement{
@@ -389,19 +389,19 @@ construct_shortener_acl(Permissions) ->
 %%
 
 shorten_url(ShortenedUrlParams, C) ->
-    swag_client_shortener_api:shorten_url(
+    swag_client_ushort_shortener_api:shorten_url(
         ?config(api_endpoint, C),
         append_common_params(#{body => ShortenedUrlParams}, C)
     ).
 
 delete_shortened_url(ID, C) ->
-    swag_client_shortener_api:delete_shortened_url(
+    swag_client_ushort_shortener_api:delete_shortened_url(
         ?config(api_endpoint, C),
         append_common_params(#{binding => #{<<"shortenedUrlID">> => ID}}, C)
     ).
 
 get_shortened_url(ID, C) ->
-    swag_client_shortener_api:get_shortened_url(
+    swag_client_ushort_shortener_api:get_shortened_url(
         ?config(api_endpoint, C),
         append_common_params(#{binding => #{<<"shortenedUrlID">> => ID}}, C)
     ).

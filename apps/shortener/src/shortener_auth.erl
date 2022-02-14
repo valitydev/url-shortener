@@ -9,7 +9,8 @@
 -export_type([context/0]).
 -export_type([claims/0]).
 
--spec authorize_api_key(swag_server:operation_id(), swag_server:api_key()) -> {true, Context :: context()} | false.
+-spec authorize_api_key(swag_server_ushort:operation_id(), swag_server_ushort:api_key()) ->
+    {true, Context :: context()} | false.
 authorize_api_key(OperationID, ApiKey) ->
     case parse_api_key(ApiKey) of
         {ok, {Type, Credentials}} ->
@@ -28,7 +29,8 @@ authorize_api_key(OperationID, ApiKey) ->
 log_auth_error(OperationID, Error) ->
     logger:info("API Key authorization failed for ~p due to ~p", [OperationID, Error]).
 
--spec parse_api_key(swag_server:api_key()) -> {ok, {bearer, Credentials :: binary()}} | {error, Reason :: atom()}.
+-spec parse_api_key(swag_server_ushort:api_key()) ->
+    {ok, {bearer, Credentials :: binary()}} | {error, Reason :: atom()}.
 parse_api_key(ApiKey) ->
     case ApiKey of
         <<"Bearer ", Credentials/binary>> ->
@@ -37,15 +39,15 @@ parse_api_key(ApiKey) ->
             {error, unsupported_auth_scheme}
     end.
 
--spec authorize_api_key(swag_server:operation_id(), Type :: atom(), Credentials :: binary()) ->
+-spec authorize_api_key(swag_server_ushort:operation_id(), Type :: atom(), Credentials :: binary()) ->
     {ok, context()} | {error, Reason :: atom()}.
 authorize_api_key(_OperationID, bearer, Token) ->
     shortener_authorizer_jwt:verify(Token).
 
 -spec authorize_operation(OperationID, Slug, ReqContext, WoodyCtx) -> ok | {error, forbidden} when
-    OperationID :: swag_server:operation_id(),
+    OperationID :: swag_server_ushort:operation_id(),
     Slug :: shortener_slug:slug() | no_slug,
-    ReqContext :: swag_server:request_context(),
+    ReqContext :: swag_server_ushort:request_context(),
     WoodyCtx :: woody_context:ctx().
 authorize_operation(OperationID, Slug, ReqContext, WoodyCtx) ->
     {{SubjectID, _ACL, ExpiresAt}, Claims} = get_auth_context(ReqContext),

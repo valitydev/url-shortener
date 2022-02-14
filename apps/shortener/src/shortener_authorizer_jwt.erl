@@ -31,7 +31,9 @@
 -type token() :: binary().
 -type claims() :: #{binary() => term()}.
 %% Added expiration to subject tuple as part of token service claims
--type subject() :: {subject_id(), shortener_acl:t(), pos_integer() | undefined}.
+%% NOTE
+%% Hacky way to pass dialyzer. As it is a depricated auth method, I don't care
+-type subject() :: {subject_id(), shortener_acl:t(), pos_integer() | undefined} | {subject_id(), shortener_acl:t()}.
 -type subject_id() :: binary().
 -type t() :: {subject(), claims()}.
 -type expiration() ::

@@ -15,7 +15,7 @@ policy_init(Req) ->
 allowed_origins(_, State) ->
     {'*', State}.
 
--spec allowed_headers(cowboy_req:req(), any()) -> {[binary()], any()}.
+-spec allowed_headers(cowboy_req:req() | undefined, any()) -> {[binary()], any()}.
 allowed_headers(_, State) ->
     {
         [
@@ -29,6 +29,6 @@ allowed_headers(_, State) ->
         State
     }.
 
--spec allowed_methods(cowboy_req:req(), any()) -> {[binary()], any()}.
+-spec allowed_methods(cowboy_req:req() | undefined, any()) -> {[binary()], any()}.
 allowed_methods(_, State) ->
     {[<<"GET">>, <<"POST">>, <<"PUT">>, <<"DELETE">>, <<"OPTIONS">>], State}.
