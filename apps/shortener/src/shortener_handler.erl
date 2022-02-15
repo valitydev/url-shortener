@@ -2,7 +2,7 @@
 
 %% Swagger handler
 
--behaviour(swag_server_logic_handler).
+-behaviour(swag_server_ushort_logic_handler).
 
 -export([authorize_api_key/4]).
 -export([handle_request/4]).
@@ -20,23 +20,27 @@
 %% TODO refactor in case of different classes of users using this API
 -define(REALM, <<"external">>).
 
--type operation_id() :: swag_server:operation_id().
--type request_ctx() :: swag_server:request_context().
+-type operation_id() :: swag_server_ushort:operation_id().
+-type request_ctx() :: swag_server_ushort:request_context().
 -type request_data() :: #{atom() | binary() => term()}.
 -type subject_id() :: woody_user_identity:id().
--type validation_error() :: swag_server_validation:error().
+-type validation_error() :: swag_server_ushort_validation:error().
 -type error_type() :: validation_error.
--type error_message() :: swag_server:error_reason().
+-type error_message() :: swag_server_ushort:error_reason().
 
 -spec authorize_api_key(
-    operation_id(), swag_server:api_key(), swag_server:request_context(), swag_server:handler_opts(_)
+    operation_id(),
+    swag_server_ushort:api_key(),
+    swag_server_ushort:request_context(),
+    swag_server_ushort:handler_opts(_)
 ) ->
     Result :: false | {true, shortener_auth:context()}.
 authorize_api_key(OperationID, ApiKey, _Context, _HandlerOpts) ->
     ok = scoper:add_scope('swag.server', #{operation => OperationID}),
     shortener_auth:authorize_api_key(OperationID, ApiKey).
 
--spec handle_request(operation_id(), request_data(), request_ctx(), any()) -> {ok | error, swag_server:response()}.
+-spec handle_request(operation_id(), request_data(), request_ctx(), any()) ->
+    {ok | error, swag_server_ushort:response()}.
 handle_request(OperationID, Req, Context, _Opts) ->
     try
         AuthContext = get_auth_context(Context),
@@ -117,7 +121,7 @@ handle_woody_error(_Source, result_unknown, _Details) ->
 %%
 
 -spec process_request(operation_id(), request_data(), shortener_slug:slug(), subject_id(), woody_context:ctx()) ->
-    {ok | error, swag_server:response()}.
+    {ok | error, swag_server_ushort:response()}.
 process_request(
     'ShortenUrl',
     #{

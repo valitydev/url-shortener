@@ -1,0 +1,34 @@
+services:
+
+  testrunner:
+    image: $DEV_IMAGE_TAG
+    build:
+      dockerfile: Dockerfile.dev
+      context: .
+      args:
+        OTP_VERSION: $OTP_VERSION
+        THRIFT_VERSION: $THRIFT_VERSION
+    volumes:
+      - .:$PWD
+    hostname: $SERVICE_NAME
+    working_dir: $PWD
+    depends_on:
+      machinegun:
+        condition: service_healthy
+    ports:
+      - "8022:8022"
+    command: /sbin/init
+
+  machinegun:
+    image: docker.io/rbkmoney/machinegun:c05a8c18cd4f7966d70b6ad84cac9429cdfe37ae
+    ports:
+      - "8022"
+    command: /opt/machinegun/bin/machinegun foreground
+    volumes:
+      - ./test/machinegun/config.yaml:/opt/machinegun/etc/config.yaml
+      - ./test/machinegun/cookie:/opt/machinegun/etc/cookie
+    healthcheck:
+      test: curl http://localhost:8022/health
+      interval: 5s
+      timeout: 1s
+      retries: 20

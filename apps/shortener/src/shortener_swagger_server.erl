@@ -30,7 +30,7 @@ get_cowboy_config(LogicHandler, AdditionalRoutes, Opts) ->
     ShortUrlPath = maps:get(path, ShortUrlTemplate),
     Routes = squash_routes(
         AdditionalRoutes ++
-            swag_server_router:get_paths(LogicHandler) ++
+            swag_server_ushort_router:get_paths(LogicHandler) ++
             [{'_', [{genlib:to_list(ShortUrlPath) ++ ":shortenedUrlID", shortener_handler, #{}}]}]
     ),
     CowboyOps = #{
@@ -63,7 +63,7 @@ mk_operation_id_getter(#{env := Env}) ->
     fun(Req) ->
         case cowboy_router:execute(Req, Env) of
             {ok, _, #{handler_opts := {_Operations, _LogicHandler, _SwaggerHandlerOpts} = HandlerOpts}} ->
-                case swag_server_utils:get_operation_id(Req, HandlerOpts) of
+                case swag_server_ushort_utils:get_operation_id(Req, HandlerOpts) of
                     undefined ->
                         #{};
                     OperationID ->
