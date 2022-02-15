@@ -52,7 +52,6 @@ wc-shell: dev-image
 wc-%: dev-image
 	$(DOCKER_RUN) $(DEV_IMAGE_TAG) make $*
 
-#  TODO docker compose down doesn't work yet
 wdeps-shell: dev-image
 	$(DOCKERCOMPOSE_RUN) su; \
 	$(DOCKERCOMPOSE_W_ENV) down
