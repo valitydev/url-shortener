@@ -82,7 +82,6 @@ get_processor_childspecs(Opts, AdditionalRoutes) ->
     ].
 
 get_api_childspecs(Opts, HealthRoutes) ->
-    AuthorizerSpec = shortener_authorizer_jwt:get_child_spec(maps:get(authorizer, Opts)),
     HealthRouter = [{'_', HealthRoutes}],
     SwaggerServerSpec = shortener_swagger_server:child_spec(shortener_handler, Opts, HealthRouter),
-    [AuthorizerSpec, SwaggerServerSpec].
+    [SwaggerServerSpec].

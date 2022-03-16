@@ -16,6 +16,7 @@
         mg_proto,
         bouncer_proto,
         bouncer_client,
+        token_keeper_client,
         woody,
         woody_user_identity,
         erl_health
