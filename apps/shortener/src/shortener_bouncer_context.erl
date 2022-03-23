@@ -17,12 +17,7 @@
 
 -type prototype_operation() :: #{
     id := swag_server_ushort:operation_id(),
-    shortened_url => shortened_url()
-}.
-
--type shortened_url() :: #{
-    id := url_id(),
-    owner_id := url_owner_id()
+    slug => shortener_slug:slug()
 }.
 
 -export_type([prototypes/0]).
@@ -30,11 +25,6 @@
 
 -export([new/0]).
 -export([build/2]).
-
-%%
-
--type url_id() :: shortener_slug:id().
--type url_owner_id() :: shortener_slug:owner().
 
 %%
 
@@ -54,15 +44,15 @@ build(Prototypes, {Acc0, External}) ->
     {Acc1, External}.
 
 build(operation, #{id := OperationID} = Params, Acc) ->
-    ShortenedUrl = maps:get(shortened_url, Params, #{}),
+    Slug = maps:get(slug, Params, #{}),
     Acc#bctx_v1_ContextFragment{
         shortener = #bctx_v1_ContextUrlShortener{
             op = #bctx_v1_UrlShortenerOperation{
                 id = operation_id_to_binary(OperationID),
                 shortened_url = #bctx_v1_ShortenedUrl{
-                    id = maps:get(id, ShortenedUrl, undefined),
+                    id = maps:get(id, Slug, undefined),
                     owner = #bouncer_base_Entity{
-                        id = maps:get(owner_id, ShortenedUrl, undefined)
+                        id = maps:get(owner, Slug, undefined)
                     }
                 }
             }

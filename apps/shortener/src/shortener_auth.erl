@@ -8,7 +8,7 @@
 -export([get_user_email/1]).
 
 -export([preauthorize_api_key/1]).
--export([authorize_api_key/3]).
+-export([authenticate_api_key/3]).
 -export([authorize_operation/3]).
 
 -export_type([resolution/0]).
@@ -23,8 +23,7 @@
 
 -type resolution() ::
     allowed
-    | forbidden
-    | {forbidden, _Reason}.
+    | forbidden.
 
 -define(AUTHORIZED(Ctx), {authorized, Ctx}).
 -define(UNAUTHORIZED(Ctx), {unauthorized, Ctx}).
@@ -63,12 +62,12 @@ preauthorize_api_key(ApiKey) ->
             {error, Error}
     end.
 
--spec authorize_api_key(preauth_context(), token_keeper_client:token_context(), woody_context:ctx()) ->
+-spec authenticate_api_key(preauth_context(), token_keeper_client:token_context(), woody_context:ctx()) ->
     {ok, auth_context()} | {error, _Reason}.
-authorize_api_key(?UNAUTHORIZED({TokenType, Token}), TokenContext, WoodyContext) ->
-    authorize_token_by_type(TokenType, Token, TokenContext, WoodyContext).
+authenticate_api_key(?UNAUTHORIZED({TokenType, Token}), TokenContext, WoodyContext) ->
+    authenticate_token_by_type(TokenType, Token, TokenContext, WoodyContext).
 
-authorize_token_by_type(bearer, Token, TokenContext, WoodyContext) ->
+authenticate_token_by_type(bearer, Token, TokenContext, WoodyContext) ->
     Authenticator = token_keeper_client:authenticator(WoodyContext),
     case token_keeper_authenticator:authenticate(Token, TokenContext, Authenticator) of
         {ok, AuthData} ->

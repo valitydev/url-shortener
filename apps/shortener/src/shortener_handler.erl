@@ -50,14 +50,14 @@ authorize_api_key(OperationID, ApiKey, _Context, _HandlerOpts) ->
 handle_request(OperationID, Req, SwagContext0, _Opts) ->
     try
         WoodyContext0 = create_woody_ctx(Req),
-        SwagContext = do_authorize_api_key(SwagContext0, WoodyContext0),
-        AuthContext = get_auth_context(SwagContext),
-        WoodyContext = put_user_identity(WoodyContext0, AuthContext),
-        Slug = prefetch_slug(Req, WoodyContext),
-        case shortener_auth:authorize_operation(make_prototypes(OperationID, Slug), SwagContext, WoodyContext) of
+        SwagContext1 = authenticate_api_key(SwagContext0, WoodyContext0),
+        AuthContext = get_auth_context(SwagContext1),
+        WoodyContext1 = put_user_identity(WoodyContext0, AuthContext),
+        Slug = prefetch_slug(Req, WoodyContext1),
+        case shortener_auth:authorize_operation(make_prototypes(OperationID, Slug), SwagContext1, WoodyContext1) of
             allowed ->
                 SubjectID = shortener_auth:get_subject_id(AuthContext),
-                process_request(OperationID, Req, Slug, SubjectID, WoodyContext);
+                process_request(OperationID, Req, Slug, SubjectID, WoodyContext1);
             forbidden ->
                 {ok, {403, #{}, undefined}}
         end
@@ -106,15 +106,9 @@ make_prototypes(OperationID, Slug) ->
     [
         {operation, #{
             id => OperationID,
-            shortened_url => make_slug_prototype(Slug)
+            slug => Slug
         }}
     ].
-
-make_slug_prototype(#{id := ID, owner := Owner}) ->
-    #{
-        id => ID,
-        owner_id => Owner
-    }.
 
 get_auth_context(#{auth_context := AuthContext}) ->
     AuthContext.
@@ -140,8 +134,8 @@ handle_woody_error(_Source, resource_unavailable, _Details) ->
 handle_woody_error(_Source, result_unknown, _Details) ->
     {504, #{}, <<>>}.
 
-do_authorize_api_key(SwagContext = #{auth_context := PreAuthContext}, WoodyContext) ->
-    case shortener_auth:authorize_api_key(PreAuthContext, make_token_context(SwagContext), WoodyContext) of
+authenticate_api_key(SwagContext = #{auth_context := PreAuthContext}, WoodyContext) ->
+    case shortener_auth:authenticate_api_key(PreAuthContext, make_token_context(SwagContext), WoodyContext) of
         {ok, AuthContext} ->
             SwagContext#{auth_context => AuthContext};
         {error, Error} ->
