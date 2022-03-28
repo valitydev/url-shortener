@@ -34,26 +34,37 @@
     swag_server_ushort:request_context(),
     swag_server_ushort:handler_opts(_)
 ) ->
-    Result :: false | {true, shortener_auth:context()}.
+    Result :: false | {true, shortener_auth:preauth_context()}.
 authorize_api_key(OperationID, ApiKey, _Context, _HandlerOpts) ->
     ok = scoper:add_scope('swag.server', #{operation => OperationID}),
-    shortener_auth:authorize_api_key(OperationID, ApiKey).
+    case shortener_auth:preauthorize_api_key(ApiKey) of
+        {ok, Context} ->
+            {true, Context};
+        {error, Error} ->
+            _ = logger:info("API Key preauthorization failed for ~p due to ~p", [OperationID, Error]),
+            false
+    end.
 
 -spec handle_request(operation_id(), request_data(), request_ctx(), any()) ->
     {ok | error, swag_server_ushort:response()}.
-handle_request(OperationID, Req, Context, _Opts) ->
+handle_request(OperationID, Req, SwagContext0, _Opts) ->
     try
-        AuthContext = get_auth_context(Context),
-        WoodyCtx = create_woody_ctx(Req, AuthContext),
-        Slug = prefetch_slug(Req, WoodyCtx),
-        case shortener_auth:authorize_operation(OperationID, Slug, Context, WoodyCtx) of
-            ok ->
-                SubjectID = get_subject_id(AuthContext),
-                process_request(OperationID, Req, Slug, SubjectID, WoodyCtx);
-            {error, forbidden} ->
+        WoodyContext0 = create_woody_ctx(Req),
+        SwagContext1 = authenticate_api_key(SwagContext0, WoodyContext0),
+        AuthContext = get_auth_context(SwagContext1),
+        WoodyContext1 = put_user_identity(WoodyContext0, AuthContext),
+        Slug = prefetch_slug(Req, WoodyContext1),
+        case shortener_auth:authorize_operation(make_prototypes(OperationID, Slug), SwagContext1, WoodyContext1) of
+            allowed ->
+                SubjectID = shortener_auth:get_subject_id(AuthContext),
+                process_request(OperationID, Req, Slug, SubjectID, WoodyContext1);
+            forbidden ->
                 {ok, {403, #{}, undefined}}
         end
     catch
+        throw:{token_auth_failed, Reason} ->
+            _ = logger:info("API Key authorization failed for ~p due to ~p", [OperationID, Reason]),
+            {error, {401, #{}, undefined}};
         error:{woody_error, {Source, Class, Details}} ->
             {error, handle_woody_error(Source, Class, Details)}
     after
@@ -89,27 +100,32 @@ prefetch_slug(#{'shortenedUrlID' := ID}, WoodyCtx) ->
 prefetch_slug(_Req, _WoodyCtx) ->
     no_slug.
 
-create_woody_ctx(#{'X-Request-ID' := RequestID}, AuthContext) ->
-    RpcID = woody_context:new_rpc_id(genlib:to_binary(RequestID)),
-    WoodyCtx = woody_context:new(RpcID),
-    woody_user_identity:put(collect_user_identity(AuthContext), WoodyCtx).
-
-collect_user_identity(AuthContext) ->
-    genlib_map:compact(#{
-        id => get_subject_id(AuthContext),
-        realm => ?REALM,
-        email => get_claim(<<"email">>, AuthContext, undefined),
-        username => get_claim(<<"name">>, AuthContext, undefined)
-    }).
-
-get_subject_id({{SubjectID, _ACL, _ExpiresAt}, _}) ->
-    SubjectID.
-
-get_claim(ClaimName, {_Subject, Claims}, Default) ->
-    maps:get(ClaimName, Claims, Default).
+make_prototypes(OperationID, no_slug) ->
+    [{operation, #{id => OperationID}}];
+make_prototypes(OperationID, Slug) ->
+    [
+        {operation, #{
+            id => OperationID,
+            slug => Slug
+        }}
+    ].
 
 get_auth_context(#{auth_context := AuthContext}) ->
     AuthContext.
+
+create_woody_ctx(#{'X-Request-ID' := RequestID}) ->
+    RpcID = woody_context:new_rpc_id(genlib:to_binary(RequestID)),
+    woody_context:new(RpcID).
+
+put_user_identity(WoodyContext, AuthContext) ->
+    woody_user_identity:put(collect_user_identity(AuthContext), WoodyContext).
+
+collect_user_identity(AuthContext) ->
+    genlib_map:compact(#{
+        id => shortener_auth:get_subject_id(AuthContext),
+        realm => ?REALM,
+        email => shortener_auth:get_user_email(AuthContext)
+    }).
 
 handle_woody_error(_Source, result_unexpected, _Details) ->
     {500, #{}, <<>>};
@@ -117,6 +133,22 @@ handle_woody_error(_Source, resource_unavailable, _Details) ->
     {503, #{}, <<>>};
 handle_woody_error(_Source, result_unknown, _Details) ->
     {504, #{}, <<>>}.
+
+authenticate_api_key(SwagContext = #{auth_context := PreAuthContext}, WoodyContext) ->
+    case shortener_auth:authenticate_api_key(PreAuthContext, make_token_context(SwagContext), WoodyContext) of
+        {ok, AuthContext} ->
+            SwagContext#{auth_context => AuthContext};
+        {error, Error} ->
+            throw({token_auth_failed, Error})
+    end.
+
+make_token_context(#{cowboy_req := CowboyReq}) ->
+    case cowboy_req:header(<<"origin">>, CowboyReq) of
+        Origin when is_binary(Origin) ->
+            #{request_origin => Origin};
+        undefined ->
+            #{}
+    end.
 
 %%
 

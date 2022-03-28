@@ -3,6 +3,8 @@
 -include_lib("bouncer_proto/include/bouncer_decisions_thrift.hrl").
 -include_lib("bouncer_proto/include/bouncer_context_v1_thrift.hrl").
 
+-export([init/1]).
+
 -export([all/0]).
 -export([groups/0]).
 -export([init_per_suite/1]).
@@ -31,16 +33,17 @@
 
 -type config() :: [{atom(), term()}].
 -type test_case_name() :: atom().
+-type group_name() :: atom().
 
 -define(config(Key, C), (element(2, lists:keyfind(Key, 1, C)))).
+-define(AUTH_TOKEN, <<"LETMEIN">>).
 
--spec all() -> [test_case_name()].
+-spec all() -> [test_case_name() | {group, group_name()}].
 all() ->
     [
         {group, general},
         {group, cors},
-        woody_timeout_test,
-        health_check_passing
+        {group, misc}
     ].
 
 -spec groups() -> [{atom(), list(), [test_case_name()]}].
@@ -58,8 +61,16 @@ groups() ->
             supported_cors_method,
             unsupported_cors_header,
             supported_cors_header
+        ]},
+        {misc, [], [
+            woody_timeout_test,
+            health_check_passing
         ]}
     ].
+
+-spec init([]) -> {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
+init([]) ->
+    {ok, {#{strategy => one_for_all, intensity => 1, period => 1}, []}}.
 
 -spec init_per_suite(config()) -> config().
 init_per_suite(C) ->
@@ -72,8 +83,7 @@ init_per_suite(C) ->
     Apps =
         genlib_app:start_application_with(scoper, [
             {storage, scoper_storage_logger}
-        ]) ++
-            genlib_app:start_application_with(bouncer_client, shortener_ct_helper:get_bouncer_client_app_config()),
+        ]),
     [
         {suite_apps, Apps},
         {api_endpoint, "http://" ++ Netloc},
@@ -89,8 +99,7 @@ init_per_group(_Group, C) ->
             shortener,
             shortener_ct_helper:get_app_config(
                 ?config(port, C),
-                ?config(netloc, C),
-                get_keysource("keys/local/private.pem", C)
+                ?config(netloc, C)
             )
         ),
     [
@@ -101,22 +110,21 @@ init_per_group(_Group, C) ->
 end_per_group(_Group, C) ->
     genlib_app:stop_unload_applications(?config(shortener_app, C)).
 
-get_keysource(Key, C) ->
-    filename:join(?config(data_dir, C), Key).
-
 -spec end_per_suite(config()) -> term().
 end_per_suite(C) ->
-    genlib_app:stop_unload_applications(?config(suite_apps, C)).
+    _ = genlib_app:stop_unload_applications(?config(suite_apps, C)),
+    ok.
 
 -spec init_per_testcase(test_case_name(), config()) -> config().
 init_per_testcase(_Name, C) ->
-    shortener_ct_helper:with_test_sup(C).
+    SupPid = shortener_ct_helper:start_mocked_service_sup(?MODULE),
+    _ = shortener_ct_helper_bouncer:mock_client(SupPid),
+    [{test_sup, SupPid} | C].
 
 -spec end_per_testcase(test_case_name(), config()) -> ok.
 end_per_testcase(_Name, C) ->
-    shortener_ct_helper:stop_test_sup(C),
+    _ = shortener_ct_helper:stop_mocked_service_sup(?config(test_sup, C)),
     ok.
-
 %%
 
 -spec successful_redirect(config()) -> _.
@@ -126,17 +134,12 @@ end_per_testcase(_Name, C) ->
 -spec always_unique_url(config()) -> _.
 
 successful_redirect(C) ->
-    _ = shortener_ct_helper:mock_services(
-        [
-            {bouncer, fun('Judge', _) ->
-                {ok, #bdcs_Judgement{
-                    resolution = {allowed, #bdcs_ResolutionAllowed{}}
-                }}
-            end}
-        ],
-        C
+    _ = shortener_ct_helper_token_keeper:mock_dumb_token(?config(test_sup, C)),
+    _ = shortener_ct_helper_bouncer:mock_arbiter(
+        shortener_ct_helper_bouncer:judge_always_allowed(),
+        ?config(test_sup, C)
     ),
-    C1 = set_api_auth_token(successful_redirect, C),
+    C1 = set_api_auth_token(C),
     SourceUrl = <<"https://example.com/">>,
     Params = construct_params(SourceUrl),
     {ok, 201, _, #{<<"id">> := ID, <<"shortenedUrl">> := ShortUrl}} = shorten_url(Params, C1),
@@ -145,17 +148,12 @@ successful_redirect(C) ->
     {<<"location">>, SourceUrl} = lists:keyfind(<<"location">>, 1, Headers).
 
 successful_delete(C) ->
-    _ = shortener_ct_helper:mock_services(
-        [
-            {bouncer, fun('Judge', _) ->
-                {ok, #bdcs_Judgement{
-                    resolution = {allowed, #bdcs_ResolutionAllowed{}}
-                }}
-            end}
-        ],
-        C
+    _ = shortener_ct_helper_token_keeper:mock_dumb_token(?config(test_sup, C)),
+    _ = shortener_ct_helper_bouncer:mock_arbiter(
+        shortener_ct_helper_bouncer:judge_always_allowed(),
+        ?config(test_sup, C)
     ),
-    C1 = set_api_auth_token(successful_delete, C),
+    C1 = set_api_auth_token(C),
     Params = construct_params(<<"https://oops.io/">>),
     {ok, 201, _, #{<<"id">> := ID, <<"shortenedUrl">> := ShortUrl}} = shorten_url(Params, C1),
     {ok, 204, _, _} = delete_shortened_url(ID, C1),
@@ -163,17 +161,12 @@ successful_delete(C) ->
     {ok, 404, _, _} = hackney:request(get, ShortUrl).
 
 fordidden_source_url(C) ->
-    _ = shortener_ct_helper:mock_services(
-        [
-            {bouncer, fun('Judge', _) ->
-                {ok, #bdcs_Judgement{
-                    resolution = {allowed, #bdcs_ResolutionAllowed{}}
-                }}
-            end}
-        ],
-        C
+    _ = shortener_ct_helper_token_keeper:mock_dumb_token(?config(test_sup, C)),
+    _ = shortener_ct_helper_bouncer:mock_arbiter(
+        shortener_ct_helper_bouncer:judge_always_allowed(),
+        ?config(test_sup, C)
     ),
-    C1 = set_api_auth_token(fordidden_source_url, C),
+    C1 = set_api_auth_token(C),
     {ok, 201, _, #{}} = shorten_url(construct_params(<<"http://localhost/hack?id=42">>), C1),
     {ok, 201, _, #{}} = shorten_url(construct_params(<<"https://localhost/hack?id=42">>), C1),
     {ok, 400, _, #{}} = shorten_url(construct_params(<<"http://example.io/">>), C1),
@@ -181,17 +174,12 @@ fordidden_source_url(C) ->
     {ok, 201, _, #{}} = shorten_url(construct_params(<<"ftp://ftp.hp.com/pub/hpcp/newsletter_july2003">>), C1).
 
 url_expired(C) ->
-    _ = shortener_ct_helper:mock_services(
-        [
-            {bouncer, fun('Judge', _) ->
-                {ok, #bdcs_Judgement{
-                    resolution = {allowed, #bdcs_ResolutionAllowed{}}
-                }}
-            end}
-        ],
-        C
+    _ = shortener_ct_helper_token_keeper:mock_dumb_token(?config(test_sup, C)),
+    _ = shortener_ct_helper_bouncer:mock_arbiter(
+        shortener_ct_helper_bouncer:judge_always_allowed(),
+        ?config(test_sup, C)
     ),
-    C1 = set_api_auth_token(url_expired, C),
+    C1 = set_api_auth_token(C),
     Params = construct_params(<<"https://oops.io/">>, 1),
     {ok, 201, _, #{<<"id">> := ID, <<"shortenedUrl">> := ShortUrl}} = shorten_url(Params, C1),
     {ok, 200, _, #{<<"shortenedUrl">> := ShortUrl}} = get_shortened_url(ID, C1),
@@ -200,17 +188,12 @@ url_expired(C) ->
     {ok, 404, _, _} = hackney:request(get, ShortUrl).
 
 always_unique_url(C) ->
-    _ = shortener_ct_helper:mock_services(
-        [
-            {bouncer, fun('Judge', _) ->
-                {ok, #bdcs_Judgement{
-                    resolution = {allowed, #bdcs_ResolutionAllowed{}}
-                }}
-            end}
-        ],
-        C
+    _ = shortener_ct_helper_token_keeper:mock_dumb_token(?config(test_sup, C)),
+    _ = shortener_ct_helper_bouncer:mock_arbiter(
+        shortener_ct_helper_bouncer:judge_always_allowed(),
+        ?config(test_sup, C)
     ),
-    C1 = set_api_auth_token(always_unique_url, C),
+    C1 = set_api_auth_token(C),
     N = 42,
     Params = construct_params(<<"https://oops.io/">>, 3600),
     {IDs, ShortUrls} = lists:unzip([
@@ -228,38 +211,28 @@ always_unique_url(C) ->
 -spec supported_cors_header(config()) -> _.
 
 unsupported_cors_method(C) ->
-    _ = shortener_ct_helper:mock_services(
-        [
-            {bouncer, fun('Judge', _) ->
-                {ok, #bdcs_Judgement{
-                    resolution = {allowed, #bdcs_ResolutionAllowed{}}
-                }}
-            end}
-        ],
-        C
+    _ = shortener_ct_helper_token_keeper:mock_dumb_token(?config(test_sup, C)),
+    _ = shortener_ct_helper_bouncer:mock_arbiter(
+        shortener_ct_helper_bouncer:judge_always_allowed(),
+        ?config(test_sup, C)
     ),
     SourceUrl = <<"https://oops.io/">>,
     Params = construct_params(SourceUrl),
-    C1 = set_api_auth_token(unsupported_cors_method, C),
+    C1 = set_api_auth_token(C),
     {ok, 201, _, #{<<"shortenedUrl">> := ShortUrl}} = shorten_url(Params, C1),
     ReqHeaders = [{<<"origin">>, <<"localhost">>}, {<<"access-control-request-method">>, <<"PATCH">>}],
     {ok, 200, Headers, _} = hackney:request(options, ShortUrl, ReqHeaders),
     false = lists:member(<<"access-control-allow-methods">>, Headers).
 
 supported_cors_method(C) ->
-    _ = shortener_ct_helper:mock_services(
-        [
-            {bouncer, fun('Judge', _) ->
-                {ok, #bdcs_Judgement{
-                    resolution = {allowed, #bdcs_ResolutionAllowed{}}
-                }}
-            end}
-        ],
-        C
+    _ = shortener_ct_helper_token_keeper:mock_dumb_token(?config(test_sup, C)),
+    _ = shortener_ct_helper_bouncer:mock_arbiter(
+        shortener_ct_helper_bouncer:judge_always_allowed(),
+        ?config(test_sup, C)
     ),
     SourceUrl = <<"https://oops.io/">>,
     Params = construct_params(SourceUrl),
-    C1 = set_api_auth_token(supported_cors_method, C),
+    C1 = set_api_auth_token(C),
     {ok, 201, _, #{<<"shortenedUrl">> := ShortUrl}} = shorten_url(Params, C1),
     ReqHeaders = [{<<"origin">>, <<"localhost">>}, {<<"access-control-request-method">>, <<"GET">>}],
     {ok, 200, Headers, _} = hackney:request(options, ShortUrl, ReqHeaders),
@@ -268,19 +241,14 @@ supported_cors_method(C) ->
     Allowed = binary:split(Returned, <<",">>, [global]).
 
 supported_cors_header(C) ->
-    _ = shortener_ct_helper:mock_services(
-        [
-            {bouncer, fun('Judge', _) ->
-                {ok, #bdcs_Judgement{
-                    resolution = {allowed, #bdcs_ResolutionAllowed{}}
-                }}
-            end}
-        ],
-        C
+    _ = shortener_ct_helper_token_keeper:mock_dumb_token(?config(test_sup, C)),
+    _ = shortener_ct_helper_bouncer:mock_arbiter(
+        shortener_ct_helper_bouncer:judge_always_allowed(),
+        ?config(test_sup, C)
     ),
     SourceUrl = <<"https://oops.io/">>,
     Params = construct_params(SourceUrl),
-    C1 = set_api_auth_token(supported_cors_header, C),
+    C1 = set_api_auth_token(C),
     {ok, 201, _, #{<<"shortenedUrl">> := ShortUrl}} = shorten_url(Params, C1),
     ReqHeaders = [
         {<<"origin">>, <<"localhost">>},
@@ -294,19 +262,14 @@ supported_cors_header(C) ->
     [_ | Allowed] = binary:split(Returned, <<",">>, [global]).
 
 unsupported_cors_header(C) ->
-    _ = shortener_ct_helper:mock_services(
-        [
-            {bouncer, fun('Judge', _) ->
-                {ok, #bdcs_Judgement{
-                    resolution = {allowed, #bdcs_ResolutionAllowed{}}
-                }}
-            end}
-        ],
-        C
+    _ = shortener_ct_helper_token_keeper:mock_dumb_token(?config(test_sup, C)),
+    _ = shortener_ct_helper_bouncer:mock_arbiter(
+        shortener_ct_helper_bouncer:judge_always_allowed(),
+        ?config(test_sup, C)
     ),
     SourceUrl = <<"https://oops.io/">>,
     Params = construct_params(SourceUrl),
-    C1 = set_api_auth_token(unsupported_cors_header, C),
+    C1 = set_api_auth_token(C),
     {ok, 201, _, #{<<"shortenedUrl">> := ShortUrl}} = shorten_url(Params, C1),
     ReqHeaders = [
         {<<"origin">>, <<"localhost">>},
@@ -336,21 +299,15 @@ woody_timeout_test(C) ->
         shortener_ct_helper:get_app_config(
             ?config(port, C),
             ?config(netloc, C),
-            get_keysource("keys/local/private.pem", C),
             <<"http://invalid_url:8022/v1/automaton">>
         )
     ),
-    _ = shortener_ct_helper:mock_services(
-        [
-            {bouncer, fun('Judge', _) ->
-                {ok, #bdcs_Judgement{
-                    resolution = {allowed, #bdcs_ResolutionAllowed{}}
-                }}
-            end}
-        ],
-        C
+    _ = shortener_ct_helper_token_keeper:mock_dumb_token(?config(test_sup, C)),
+    _ = shortener_ct_helper_bouncer:mock_arbiter(
+        shortener_ct_helper_bouncer:judge_always_allowed(),
+        ?config(test_sup, C)
     ),
-    C2 = set_api_auth_token(woody_timeout_test, C),
+    C2 = set_api_auth_token(C),
     SourceUrl = <<"https://example.com/">>,
     Params = construct_params(SourceUrl),
     {Time, {error, {invalid_response_code, 503}}} =
@@ -367,8 +324,7 @@ health_check_passing(C) ->
         shortener,
         shortener_ct_helper:get_app_config(
             ?config(port, C),
-            ?config(netloc, C),
-            get_keysource("keys/local/private.pem", C)
+            ?config(netloc, C)
         )
     ),
     Path = ?config(api_endpoint, C) ++ "/health",
@@ -377,14 +333,12 @@ health_check_passing(C) ->
     genlib_app:stop_unload_applications(Apps).
 
 %%
-set_api_auth_token(Name, C) ->
-    UserID = genlib:to_binary(Name),
-    ACL = construct_shortener_acl([]),
-    {ok, T} = shortener_authorizer_jwt:issue({{UserID, shortener_acl:from_list(ACL)}, #{}}, unlimited),
-    lists:keystore(api_auth_token, 1, C, {api_auth_token, T}).
 
-construct_shortener_acl(Permissions) ->
-    lists:map(fun(P) -> {['shortened-urls'], P} end, Permissions).
+set_api_auth_token(C) ->
+    set_api_auth_token(?AUTH_TOKEN, C).
+
+set_api_auth_token(Token, C) ->
+    lists:keystore(api_auth_token, 1, C, {api_auth_token, Token}).
 
 %%
 
