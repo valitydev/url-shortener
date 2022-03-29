@@ -26,8 +26,6 @@ jobs:
         run: echo "::set-output name=version::$REBAR_VERSION"
       - id: thrift-version
         run: echo "::set-output name=version::$THRIFT_VERSION"
-      - id: test
-        run: echo "ACTIONS_CACHE_URL= $ACTIONS_CACHE_URL"
 
   run:
     name: Run checks
@@ -39,3 +37,4 @@ jobs:
       use-thrift: true
       thrift-version: ${{ needs.setup.outputs.thrift-version }}
       run-ct-with-compose: true
+      cache-version: v2
