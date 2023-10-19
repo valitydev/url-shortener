@@ -19,7 +19,10 @@
         token_keeper_client,
         woody,
         woody_user_identity,
-        erl_health
+        erl_health,
+        opentelemetry_api,
+        opentelemetry_exporter,
+        opentelemetry
     ]},
     {env, []},
     {modules, []},

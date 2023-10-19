@@ -69,7 +69,7 @@ get_processor_childspecs(Opts, AdditionalRoutes) ->
                 port => maps:get(port, Opts, 8022),
                 protocol_opts => maps:get(protocol_opts, Opts, #{}),
                 transport_opts => maps:get(transport_opts, Opts, #{}),
-                event_handler => scoper_woody_event_handler,
+                event_handler => shortener_woody_event_handler,
                 handlers => [
                     {"/v1/stateproc", {
                         {mg_proto_state_processing_thrift, 'Processor'},
