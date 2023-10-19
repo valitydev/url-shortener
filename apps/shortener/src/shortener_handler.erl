@@ -1,5 +1,8 @@
 -module(shortener_handler).
 
+-include_lib("opentelemetry_api/include/otel_tracer.hrl").
+-include_lib("opentelemetry_api/include/opentelemetry.hrl").
+
 %% Swagger handler
 
 -behaviour(swag_server_ushort_logic_handler).
@@ -36,7 +39,6 @@
 ) ->
     Result :: false | {true, shortener_auth:preauth_context()}.
 authorize_api_key(OperationID, ApiKey, _Context, _HandlerOpts) ->
-    ok = scoper:add_scope('swag.server', #{operation => OperationID}),
     case shortener_auth:preauthorize_api_key(ApiKey) of
         {ok, Context} ->
             {true, Context};
@@ -47,12 +49,22 @@ authorize_api_key(OperationID, ApiKey, _Context, _HandlerOpts) ->
 
 -spec handle_request(operation_id(), request_data(), request_ctx(), any()) ->
     {ok | error, swag_server_ushort:response()}.
-handle_request(OperationID, Req, SwagContext0, _Opts) ->
+handle_request(OperationID, Req, SwagContext, Opts) ->
+    SpanName = <<"server ", (atom_to_binary(OperationID))/binary>>,
+    ?with_span(SpanName, #{kind => ?SPAN_KIND_SERVER}, fun(_SpanCtx) ->
+        scoper:scope('swag.server', #{operation => OperationID}, fun() ->
+            handle_request_(OperationID, Req, SwagContext, Opts)
+        end)
+    end).
+
+handle_request_(OperationID, Req, SwagContext0, _Opts) ->
     try
         WoodyContext0 = create_woody_ctx(Req),
         SwagContext1 = authenticate_api_key(SwagContext0, WoodyContext0),
         AuthContext = get_auth_context(SwagContext1),
         WoodyContext1 = put_user_identity(WoodyContext0, AuthContext),
+        ok = set_context_meta(AuthContext),
+        ok = sync_scoper_otel_meta(),
         Slug = prefetch_slug(Req, WoodyContext1),
         case shortener_auth:authorize_operation(make_prototypes(OperationID, Slug), SwagContext1, WoodyContext1) of
             allowed ->
@@ -67,8 +79,6 @@ handle_request(OperationID, Req, SwagContext0, _Opts) ->
             {error, {401, #{}, undefined}};
         error:{woody_error, {Source, Class, Details}} ->
             {error, handle_woody_error(Source, Class, Details)}
-    after
-        ok = scoper:remove_scope()
     end.
 
 -spec map_error(error_type(), validation_error()) -> error_message().
@@ -126,6 +136,18 @@ collect_user_identity(AuthContext) ->
         realm => ?REALM,
         email => shortener_auth:get_user_email(AuthContext)
     }).
+
+set_context_meta(AuthContext) ->
+    Meta = #{
+        metadata => #{
+            'user-identity' => collect_user_identity(AuthContext)
+        }
+    },
+    scoper:add_meta(Meta).
+
+sync_scoper_otel_meta() ->
+    _ = otel_span:set_attributes(otel_tracer:current_span_ctx(), genlib_map:flatten_join($., scoper:collect())),
+    ok.
 
 handle_woody_error(_Source, result_unexpected, _Details) ->
     {500, #{}, <<>>};
