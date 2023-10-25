@@ -121,7 +121,7 @@ construct_descriptor(NS, ID, HistoryRange) ->
 
 issue_call(Method, Args, Context) ->
     ClientOpts0 = get_service_client_config(automaton),
-    ClientOpts1 = ClientOpts0#{event_handler => shortener_woody_event_handler},
+    ClientOpts1 = ClientOpts0#{event_handler => scoper_woody_event_handler},
     case call_service(automaton, Method, Args, ClientOpts1, Context) of
         {ok, _} = Ok ->
             Ok;

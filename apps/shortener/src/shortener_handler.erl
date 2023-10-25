@@ -38,7 +38,8 @@
     swag_server_ushort:handler_opts(_)
 ) ->
     Result :: false | {true, shortener_auth:preauth_context()}.
-authorize_api_key(OperationID, ApiKey, _Context, _HandlerOpts) ->
+authorize_api_key(OperationID, ApiKey, Context, _HandlerOpts) ->
+    ok = set_otel_context(Context),
     case shortener_auth:preauthorize_api_key(ApiKey) of
         {ok, Context} ->
             {true, Context};
@@ -276,6 +277,14 @@ get_source_url_whitelist() ->
     % Teach the swagger-codegen bastard to behave and accept handler options
     % upon initialization
     maps:get(source_url_whitelist, genlib_app:env(shortener, api), []).
+
+set_otel_context(#{cowboy_req := Req}) ->
+    Headers = cowboy_req:headers(Req),
+    %% Implicitly puts OTEL context into process dictionary.
+    %% Since cowboy does not reuse process for other requests, we don't care
+    %% about cleaning it up.
+    _OtelCtx = otel_propagator_text_map:extract(maps:to_list(Headers)),
+    ok.
 
 %%
 
