@@ -65,7 +65,6 @@ handle_request_(OperationID, Req, SwagContext0, _Opts) ->
         AuthContext = get_auth_context(SwagContext1),
         WoodyContext1 = put_user_identity(WoodyContext0, AuthContext),
         ok = set_context_meta(AuthContext),
-        ok = sync_scoper_otel_meta(),
         Slug = prefetch_slug(Req, WoodyContext1),
         case shortener_auth:authorize_operation(make_prototypes(OperationID, Slug), SwagContext1, WoodyContext1) of
             allowed ->
@@ -145,10 +144,6 @@ set_context_meta(AuthContext) ->
         }
     },
     scoper:add_meta(Meta).
-
-sync_scoper_otel_meta() ->
-    _ = otel_span:set_attributes(otel_tracer:current_span_ctx(), genlib_map:flatten_join($., scoper:collect())),
-    ok.
 
 handle_woody_error(_Source, result_unexpected, _Details) ->
     {500, #{}, <<>>};
