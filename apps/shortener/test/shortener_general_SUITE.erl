@@ -310,11 +310,22 @@ woody_timeout_test(C) ->
     C2 = set_api_auth_token(C),
     SourceUrl = <<"https://example.com/">>,
     Params = construct_params(SourceUrl),
+    %% NOTE: Replace default 2s timeout for native resolver
+    %%       See inet_gethost_native, `(inet_db:res_option(timeout)*4)`
+    OldResTimeout = inet_db:res_option(timeout),
+    ok = inet_db:set_timeout(200),
+    %% NOTE: Host name "invalid_url" never resolves by woody client resolver,
+    %%       and `inet:gethostbyname/3` uses timeout value from `inet_db`
+    %%       multiplied by 4.
+    %%       Because of that API client timeouts on receive and doesn't return
+    %%       previously expected error `{invalid_response_code, 503}`.
+    %%erlang:display(inet_db:res_option(timeout)),
     {Time, {error, {invalid_response_code, 503}}} =
         timer:tc(fun() ->
             shorten_url(Params, C2)
         end),
     true = (Time >= 3000000),
+    ok = inet_db:set_timeout(OldResTimeout),
     genlib_app:stop_unload_applications(Apps).
 
 %%
