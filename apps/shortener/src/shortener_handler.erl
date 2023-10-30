@@ -41,8 +41,8 @@
 authorize_api_key(OperationID, ApiKey, Context, _HandlerOpts) ->
     ok = set_otel_context(Context),
     case shortener_auth:preauthorize_api_key(ApiKey) of
-        {ok, Context} ->
-            {true, Context};
+        {ok, Context1} ->
+            {true, Context1};
         {error, Error} ->
             _ = logger:info("API Key preauthorization failed for ~p due to ~p", [OperationID, Error]),
             false

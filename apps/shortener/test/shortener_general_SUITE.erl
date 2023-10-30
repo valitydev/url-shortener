@@ -1,7 +1,7 @@
 -module(shortener_general_SUITE).
 
--include_lib("bouncer_proto/include/bouncer_decisions_thrift.hrl").
--include_lib("bouncer_proto/include/bouncer_context_v1_thrift.hrl").
+-include_lib("bouncer_proto/include/bouncer_decision_thrift.hrl").
+-include_lib("bouncer_proto/include/bouncer_ctx_v1_thrift.hrl").
 
 -export([init/1]).
 
