@@ -1,5 +1,8 @@
 -module(shortener_handler).
 
+-include_lib("opentelemetry_api/include/otel_tracer.hrl").
+-include_lib("opentelemetry_api/include/opentelemetry.hrl").
+
 %% Swagger handler
 
 -behaviour(swag_server_ushort_logic_handler).
@@ -35,11 +38,11 @@
     swag_server_ushort:handler_opts(_)
 ) ->
     Result :: false | {true, shortener_auth:preauth_context()}.
-authorize_api_key(OperationID, ApiKey, _Context, _HandlerOpts) ->
-    ok = scoper:add_scope('swag.server', #{operation => OperationID}),
+authorize_api_key(OperationID, ApiKey, Context, _HandlerOpts) ->
+    ok = set_otel_context(Context),
     case shortener_auth:preauthorize_api_key(ApiKey) of
-        {ok, Context} ->
-            {true, Context};
+        {ok, Context1} ->
+            {true, Context1};
         {error, Error} ->
             _ = logger:info("API Key preauthorization failed for ~p due to ~p", [OperationID, Error]),
             false
@@ -47,12 +50,21 @@ authorize_api_key(OperationID, ApiKey, _Context, _HandlerOpts) ->
 
 -spec handle_request(operation_id(), request_data(), request_ctx(), any()) ->
     {ok | error, swag_server_ushort:response()}.
-handle_request(OperationID, Req, SwagContext0, _Opts) ->
+handle_request(OperationID, Req, SwagContext, Opts) ->
+    SpanName = <<"server ", (atom_to_binary(OperationID))/binary>>,
+    ?with_span(SpanName, #{kind => ?SPAN_KIND_SERVER}, fun(_SpanCtx) ->
+        scoper:scope('swag.server', #{operation => OperationID}, fun() ->
+            handle_request_(OperationID, Req, SwagContext, Opts)
+        end)
+    end).
+
+handle_request_(OperationID, Req, SwagContext0, _Opts) ->
     try
         WoodyContext0 = create_woody_ctx(Req),
         SwagContext1 = authenticate_api_key(SwagContext0, WoodyContext0),
         AuthContext = get_auth_context(SwagContext1),
         WoodyContext1 = put_user_identity(WoodyContext0, AuthContext),
+        ok = set_context_meta(AuthContext),
         Slug = prefetch_slug(Req, WoodyContext1),
         case shortener_auth:authorize_operation(make_prototypes(OperationID, Slug), SwagContext1, WoodyContext1) of
             allowed ->
@@ -67,8 +79,6 @@ handle_request(OperationID, Req, SwagContext0, _Opts) ->
             {error, {401, #{}, undefined}};
         error:{woody_error, {Source, Class, Details}} ->
             {error, handle_woody_error(Source, Class, Details)}
-    after
-        ok = scoper:remove_scope()
     end.
 
 -spec map_error(error_type(), validation_error()) -> error_message().
@@ -126,6 +136,14 @@ collect_user_identity(AuthContext) ->
         realm => ?REALM,
         email => shortener_auth:get_user_email(AuthContext)
     }).
+
+set_context_meta(AuthContext) ->
+    Meta = #{
+        metadata => #{
+            'user-identity' => collect_user_identity(AuthContext)
+        }
+    },
+    scoper:add_meta(Meta).
 
 handle_woody_error(_Source, result_unexpected, _Details) ->
     {500, #{}, <<>>};
@@ -254,6 +272,14 @@ get_source_url_whitelist() ->
     % Teach the swagger-codegen bastard to behave and accept handler options
     % upon initialization
     maps:get(source_url_whitelist, genlib_app:env(shortener, api), []).
+
+set_otel_context(#{cowboy_req := Req}) ->
+    Headers = cowboy_req:headers(Req),
+    %% Implicitly puts OTEL context into process dictionary.
+    %% Since cowboy does not reuse process for other requests, we don't care
+    %% about cleaning it up.
+    _OtelCtx = otel_propagator_text_map:extract(maps:to_list(Headers)),
+    ok.
 
 %%
 

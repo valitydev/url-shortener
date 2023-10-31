@@ -1,7 +1,7 @@
 -module(shortener_general_SUITE).
 
--include_lib("bouncer_proto/include/bouncer_decisions_thrift.hrl").
--include_lib("bouncer_proto/include/bouncer_context_v1_thrift.hrl").
+-include_lib("bouncer_proto/include/bouncer_decision_thrift.hrl").
+-include_lib("bouncer_proto/include/bouncer_ctx_v1_thrift.hrl").
 
 -export([init/1]).
 
@@ -312,7 +312,7 @@ woody_timeout_test(C) ->
     Params = construct_params(SourceUrl),
     {Time, {error, {invalid_response_code, 503}}} =
         timer:tc(fun() ->
-            shorten_url(Params, C2)
+            shorten_url(Params, 30 * 1000, C2)
         end),
     true = (Time >= 3000000),
     genlib_app:stop_unload_applications(Apps).
@@ -343,9 +343,13 @@ set_api_auth_token(Token, C) ->
 %%
 
 shorten_url(ShortenedUrlParams, C) ->
+    shorten_url(ShortenedUrlParams, 5000, C).
+
+shorten_url(ShortenedUrlParams, RecvTimeout, C) ->
     swag_client_ushort_shortener_api:shorten_url(
         ?config(api_endpoint, C),
-        append_common_params(#{body => ShortenedUrlParams}, C)
+        append_common_params(#{body => ShortenedUrlParams}, C),
+        [{recv_timeout, RecvTimeout}]
     ).
 
 delete_shortened_url(ID, C) ->

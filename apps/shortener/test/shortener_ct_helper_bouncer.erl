@@ -23,7 +23,7 @@ mock_client(SupOrConfig) ->
             [
                 {
                     org_management,
-                    {orgmgmt_auth_context_provider_thrift, 'AuthContextProvider'},
+                    {orgmgmt_authctx_provider_thrift, 'AuthContextProvider'},
                     fun('GetUserContext', {UserID}) ->
                         {encoded_fragment, Fragment} = bouncer_client:bake_context_fragment(
                             bouncer_context_helpers:make_user_fragment(#{
@@ -47,7 +47,7 @@ mock_arbiter(JudgeFun, SupOrConfig) ->
             [
                 {
                     bouncer,
-                    {bouncer_decisions_thrift, 'Arbiter'},
+                    {bouncer_decision_thrift, 'Arbiter'},
                     fun('Judge', {?TEST_RULESET_ID, Context}) ->
                         Fragments = decode_context(Context),
                         Combined = combine_fragments(Fragments),
@@ -59,11 +59,11 @@ mock_arbiter(JudgeFun, SupOrConfig) ->
         )
     ).
 
-decode_context(#bdcs_Context{fragments = Fragments}) ->
+decode_context(#decision_Context{fragments = Fragments}) ->
     maps:map(fun(_, Fragment) -> decode_fragment(Fragment) end, Fragments).
 
-decode_fragment(#bctx_ContextFragment{type = v1_thrift_binary, content = Content}) ->
-    Type = {struct, struct, {bouncer_context_v1_thrift, 'ContextFragment'}},
+decode_fragment(#ctx_ContextFragment{type = v1_thrift_binary, content = Content}) ->
+    Type = {struct, struct, {bouncer_ctx_v1_thrift, 'ContextFragment'}},
     Codec = thrift_strict_binary_codec:new(Content),
     {ok, Fragment, _} = thrift_strict_binary_codec:read(Codec, Type),
     Fragment.
@@ -80,7 +80,7 @@ combine_fragments(Fragments) ->
     [Fragment | Rest] = maps:values(Fragments),
     lists:foldl(fun combine_fragments/2, Fragment, Rest).
 
-combine_fragments(Fragment1 = #bctx_v1_ContextFragment{}, Fragment2 = #bctx_v1_ContextFragment{}) ->
+combine_fragments(Fragment1 = #ctx_v1_ContextFragment{}, Fragment2 = #ctx_v1_ContextFragment{}) ->
     combine_records(Fragment1, Fragment2).
 
 combine_records(Record1, Record2) ->

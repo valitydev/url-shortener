@@ -1,8 +1,8 @@
 -module(shortener_auth_SUITE).
 
--include_lib("bouncer_proto/include/bouncer_decisions_thrift.hrl").
+-include_lib("bouncer_proto/include/bouncer_decision_thrift.hrl").
 -include_lib("bouncer_proto/include/bouncer_base_thrift.hrl").
--include_lib("bouncer_proto/include/bouncer_context_v1_thrift.hrl").
+-include_lib("bouncer_proto/include/bouncer_ctx_v1_thrift.hrl").
 
 -include_lib("shortener_token_keeper_data.hrl").
 -include_lib("shortener_bouncer_data.hrl").
@@ -300,19 +300,19 @@ append_request_id(Params = #{header := Headers}) ->
 format_ts(Ts) ->
     genlib_rfc3339:format(Ts, second).
 
-get_operation_id(#bctx_v1_ContextFragment{
-    shortener = #bctx_v1_ContextUrlShortener{op = #bctx_v1_UrlShortenerOperation{id = OperationID}}
+get_operation_id(#ctx_v1_ContextFragment{
+    shortener = #ctx_v1_ContextUrlShortener{op = #ctx_v1_UrlShortenerOperation{id = OperationID}}
 }) ->
     OperationID.
 
 get_owner_info(Context) ->
     {get_owner_id(Context), get_user_id(Context)}.
 
-get_owner_id(#bctx_v1_ContextFragment{
-    shortener = #bctx_v1_ContextUrlShortener{op = #bctx_v1_UrlShortenerOperation{shortened_url = Url}}
+get_owner_id(#ctx_v1_ContextFragment{
+    shortener = #ctx_v1_ContextUrlShortener{op = #ctx_v1_UrlShortenerOperation{shortened_url = Url}}
 }) ->
-    #bctx_v1_ShortenedUrl{owner = #bouncer_base_Entity{id = OwnerID}} = Url,
+    #ctx_v1_ShortenedUrl{owner = #base_Entity{id = OwnerID}} = Url,
     OwnerID.
 
-get_user_id(#bctx_v1_ContextFragment{user = #bctx_v1_User{id = UserID}}) ->
+get_user_id(#ctx_v1_ContextFragment{user = #ctx_v1_User{id = UserID}}) ->
     UserID.
