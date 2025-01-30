@@ -34,10 +34,6 @@ branches:
             app_id: 15368
           - context: "Run checks / Test"
             app_id: 15368
-          - context: "codecov/patch"
-            app_id: 254
-          - context: "codecov/project"
-            app_id: 254
       enforce_admins: false
       required_conversation_resolution: false
       required_linear_history: true
