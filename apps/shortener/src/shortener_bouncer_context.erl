@@ -18,7 +18,7 @@
 
 -type prototype_operation() :: #{
     id := swag_server_ushort:operation_id(),
-    slug => shortener_slug:slug()
+    slug => shortener_machine:slug()
 }.
 
 -export_type([prototypes/0]).

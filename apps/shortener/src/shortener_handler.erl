@@ -99,9 +99,9 @@ map_error(validation_error, Error) ->
         <<"message">> => Message
     }).
 
--spec prefetch_slug(request_data(), woody_context:ctx()) -> shortener_slug:slug() | no_slug.
+-spec prefetch_slug(request_data(), woody_context:ctx()) -> shortener_machine:slug() | no_slug.
 prefetch_slug(#{'shortenedUrlID' := ID}, WoodyCtx) ->
-    case shortener_slug:get(ID, WoodyCtx) of
+    case shortener_machine:get(ID, WoodyCtx) of
         {ok, Slug} ->
             Slug;
         {error, notfound} ->
@@ -170,7 +170,7 @@ make_token_context(#{cowboy_req := CowboyReq}) ->
 
 %%
 
--spec process_request(operation_id(), request_data(), shortener_slug:slug(), subject_id(), woody_context:ctx()) ->
+-spec process_request(operation_id(), request_data(), shortener_machine:slug(), subject_id(), woody_context:ctx()) ->
     {ok | error, swag_server_ushort:response()}.
 process_request(
     'ShortenUrl',
@@ -186,7 +186,7 @@ process_request(
 ) ->
     case validate_source_url(SourceUrl) of
         true ->
-            Slug = shortener_slug:create(SourceUrl, parse_timestamp(ExpiresAt), SubjectID, WoodyCtx),
+            {ok, Slug} = shortener_machine:create(SourceUrl, parse_timestamp(ExpiresAt), SubjectID, WoodyCtx),
             {ok, {201, #{}, construct_shortened_url(Slug)}};
         false ->
             {ok,
@@ -218,7 +218,7 @@ process_request(
     _SubjectID,
     WoodyCtx
 ) ->
-    case shortener_slug:remove(ID, WoodyCtx) of
+    case shortener_machine:remove(ID, WoodyCtx) of
         ok ->
             {ok, {204, #{}, undefined}};
         {error, notfound} ->
@@ -291,7 +291,7 @@ set_otel_context(#{cowboy_req := Req}) ->
 init(Req, Opts) ->
     ID = cowboy_req:binding('shortenedUrlID', Req),
     Req1 =
-        case shortener_slug:get(ID, woody_context:new()) of
+        case shortener_machine:get(ID, woody_context:new()) of
             {ok, #{source := Source, expires_at := ExpiresAt}} ->
                 Seconds = genlib_rfc3339:parse(ExpiresAt, second),
                 {Date, Time} = calendar:system_time_to_universal_time(Seconds, second),
