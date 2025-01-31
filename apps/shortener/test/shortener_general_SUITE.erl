@@ -1,7 +1,6 @@
 -module(shortener_general_SUITE).
 
--include_lib("bouncer_proto/include/bouncer_decision_thrift.hrl").
--include_lib("bouncer_proto/include/bouncer_ctx_v1_thrift.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 -export([init/1]).
 
@@ -315,7 +314,7 @@ woody_timeout_test(C) ->
         timer:tc(fun() ->
             shorten_url(Params, 30 * 1000, C2)
         end),
-    true = (Time >= 3000000).
+    ?assertMatch(V when V >= 3000000, Time).
 
 %%
 -spec health_check_passing(config()) -> _.
