@@ -312,9 +312,9 @@ woody_timeout_test(C) ->
     Params = construct_params(SourceUrl),
     {Time, {error, {invalid_response_code, 503}}} =
         timer:tc(fun() ->
-            shorten_url(Params, 30 * 1000, C2)
+            shorten_url(Params, 3 * 1000, C2)
         end),
-    ?assertMatch(V when V >= 3000000, Time).
+    ?assertMatch(V when V >= 3000, Time).
 
 %%
 -spec health_check_passing(config()) -> _.
