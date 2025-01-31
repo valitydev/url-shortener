@@ -44,6 +44,7 @@ init([]) ->
     EventHandlerOpts = genlib_app:env(?MODULE, scoper_event_handler_options, #{}),
     RouteOpts = RouteOptsEnv#{event_handler => {scoper_woody_event_handler, EventHandlerOpts}},
 
+    %% FIXME Healthcheck handles are provided to both 8022 and 8080 endpoints!
     AdditionalRoutes =
         machinery_mg_backend:get_routes(MachineHandlers, RouteOpts) ++
             machinery_modernizer_mg_backend:get_routes(ModernizerHandlers, RouteOpts) ++
