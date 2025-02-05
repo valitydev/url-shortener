@@ -36,7 +36,19 @@ start_link() ->
 init([]) ->
     HealthRoutes = get_health_routes(genlib_app:env(?MODULE, health_check, #{})),
     PrometeusRout = get_prometheus_route(),
-    AdditionalRoutes = [PrometeusRout | HealthRoutes],
+    {Backends, MachineHandlers, ModernizerHandlers} = lists:unzip3([
+        contruct_backend_childspec('url-shortener', shortener_machine)
+    ]),
+    ok = application:set_env(?MODULE, backends, maps:from_list(Backends)),
+    RouteOptsEnv = genlib_app:env(?MODULE, route_opts, #{}),
+    EventHandlerOpts = genlib_app:env(?MODULE, scoper_event_handler_options, #{}),
+    RouteOpts = RouteOptsEnv#{event_handler => {scoper_woody_event_handler, EventHandlerOpts}},
+
+    %% FIXME Healthcheck handles are provided to both 8022 and 8080 endpoints!
+    AdditionalRoutes =
+        machinery_mg_backend:get_routes(MachineHandlers, RouteOpts) ++
+            machinery_modernizer_mg_backend:get_routes(ModernizerHandlers, RouteOpts) ++
+            [PrometeusRout | HealthRoutes],
     {ok, {
         {one_for_all, 0, 1},
         % TODO
@@ -70,12 +82,7 @@ get_processor_childspecs(Opts, AdditionalRoutes) ->
                 protocol_opts => maps:get(protocol_opts, Opts, #{}),
                 transport_opts => maps:get(transport_opts, Opts, #{}),
                 event_handler => scoper_woody_event_handler,
-                handlers => [
-                    {"/v1/stateproc", {
-                        {mg_proto_state_processing_thrift, 'Processor'},
-                        shortener_slug
-                    }}
-                ],
+                handlers => [],
                 additional_routes => AdditionalRoutes
             }
         )
@@ -85,3 +92,48 @@ get_api_childspecs(Opts, HealthRoutes) ->
     HealthRouter = [{'_', HealthRoutes}],
     SwaggerServerSpec = shortener_swagger_server:child_spec(shortener_handler, Opts, HealthRouter),
     [SwaggerServerSpec].
+
+contruct_backend_childspec(NS, Handler) ->
+    Schema = get_namespace_schema(NS),
+    {
+        construct_machinery_backend_spec(NS, Schema),
+        construct_machinery_handler_spec(NS, Handler, Schema),
+        construct_machinery_modernizer_spec(NS, Schema)
+    }.
+
+construct_machinery_backend_spec(NS, Schema) ->
+    {NS,
+        {machinery_mg_backend, #{
+            schema => Schema,
+            client => get_service_client(automaton)
+        }}}.
+
+construct_machinery_handler_spec(_NS, Handler, Schema) ->
+    {Handler, #{
+        path => "/v1/stateproc",
+        backend_config => #{schema => Schema}
+    }}.
+
+construct_machinery_modernizer_spec(_NS, Schema) ->
+    #{
+        path => "/v1/modernizer",
+        backend_config => #{schema => Schema}
+    }.
+
+get_namespace_schema('url-shortener') ->
+    shortener_machinery_schema.
+
+get_service_client(ServiceName) ->
+    case maps:get(url, get_service_client_config(ServiceName), undefined) of
+        undefined ->
+            error({unknown_service, ServiceName});
+        Url ->
+            genlib_map:compact(#{
+                url => Url,
+                event_handler => genlib_app:env(shortener, woody_event_handlers, [{scoper_woody_event_handler, #{}}])
+            })
+    end.
+
+get_service_client_config(ServiceName) ->
+    ServiceClients = genlib_app:env(shortener, service_clients, #{}),
+    maps:get(ServiceName, ServiceClients, #{}).

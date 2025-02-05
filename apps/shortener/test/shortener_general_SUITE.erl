@@ -1,7 +1,6 @@
 -module(shortener_general_SUITE).
 
--include_lib("bouncer_proto/include/bouncer_decision_thrift.hrl").
--include_lib("bouncer_proto/include/bouncer_ctx_v1_thrift.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 -export([init/1]).
 
@@ -93,6 +92,17 @@ init_per_suite(C) ->
     ] ++ C.
 
 -spec init_per_group(atom(), config()) -> config().
+init_per_group(misc, C) ->
+    ShortenerApp =
+        genlib_app:start_application_with(
+            shortener,
+            shortener_ct_helper:get_app_config(
+                ?config(port, C),
+                ?config(netloc, C),
+                <<"http://invalid_url:8022/v1/automaton">>
+            )
+        ),
+    [{shortener_app, ShortenerApp}] ++ C;
 init_per_group(_Group, C) ->
     ShortenerApp =
         genlib_app:start_application_with(
@@ -102,9 +112,7 @@ init_per_group(_Group, C) ->
                 ?config(netloc, C)
             )
         ),
-    [
-        {shortener_app, ShortenerApp}
-    ] ++ C.
+    [{shortener_app, ShortenerApp}] ++ C.
 
 -spec end_per_group(atom(), config()) -> _.
 end_per_group(_Group, C) ->
@@ -294,14 +302,6 @@ construct_params(SourceUrl, Lifetime) ->
 %%
 -spec woody_timeout_test(config()) -> _.
 woody_timeout_test(C) ->
-    Apps = genlib_app:start_application_with(
-        shortener,
-        shortener_ct_helper:get_app_config(
-            ?config(port, C),
-            ?config(netloc, C),
-            <<"http://invalid_url:8022/v1/automaton">>
-        )
-    ),
     _ = shortener_ct_helper_token_keeper:mock_dumb_token(?config(test_sup, C)),
     _ = shortener_ct_helper_bouncer:mock_arbiter(
         shortener_ct_helper_bouncer:judge_always_allowed(),
@@ -312,25 +312,16 @@ woody_timeout_test(C) ->
     Params = construct_params(SourceUrl),
     {Time, {error, {invalid_response_code, 503}}} =
         timer:tc(fun() ->
-            shorten_url(Params, 30 * 1000, C2)
+            shorten_url(Params, 3 * 1000, C2)
         end),
-    true = (Time >= 3000000),
-    genlib_app:stop_unload_applications(Apps).
+    ?assertMatch(V when V >= 3000, Time).
 
 %%
 -spec health_check_passing(config()) -> _.
 health_check_passing(C) ->
-    Apps = genlib_app:start_application_with(
-        shortener,
-        shortener_ct_helper:get_app_config(
-            ?config(port, C),
-            ?config(netloc, C)
-        )
-    ),
     Path = ?config(api_endpoint, C) ++ "/health",
     {ok, 200, _, Payload} = hackney:request(get, Path, [], <<>>, [with_body]),
-    #{<<"service">> := <<"shortener">>} = jsx:decode(Payload, [return_maps]),
-    genlib_app:stop_unload_applications(Apps).
+    #{<<"service">> := <<"shortener">>} = jsx:decode(Payload, [return_maps]).
 
 %%
 

@@ -13,7 +13,7 @@
         cowboy_cors,
         cowboy_access_log,
         swag_server_ushort,
-        mg_proto,
+        machinery,
         bouncer_proto,
         bouncer_client,
         token_keeper_client,
