@@ -12,9 +12,3 @@ storage:
 logging:
     out_type: stdout
     level: info
-
-opentelemetry:
-    service_name: machinegun
-    exporter:
-        protocol: http/protobuf
-        endpoint: http://jaeger:4318
