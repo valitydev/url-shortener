@@ -34,7 +34,7 @@ services:
       retries: 20
 
   postgres:
-    image: postgres:15-bookworm
+    image: postgres:17-bookworm
     command: -c 'max_connections=200'
     environment:
       POSTGRES_DB: "progressor_db"
