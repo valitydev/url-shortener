@@ -16,6 +16,21 @@
 
 %%
 
+-type backend_mode() :: machinegun | progressor.
+
+-define(PROCESSOR_OPT_PATTERN(NS, Handler, Schema), #{
+    processor := #{
+        client := machinery_prg_backend,
+        options := #{
+            namespace := NS,
+            handler := Handler,
+            schema := Schema
+        }
+    }
+}).
+
+%%
+
 -spec start(normal, any()) -> {ok, pid()} | {error, any()}.
 start(_StartType, _StartArgs) ->
     ?MODULE:start_link().
@@ -37,7 +52,8 @@ init([]) ->
     HealthRoutes = get_health_routes(genlib_app:env(?MODULE, health_check, #{})),
     PrometeusRout = get_prometheus_route(),
     {Backends, MachineHandlers, ModernizerHandlers} = lists:unzip3([
-        contruct_backend_childspec('url-shortener', shortener_machine)
+        contruct_backend_childspec(B, N, H, S)
+     || {B, N, H, S} <- get_namespaces_params(genlib_app:env(shortener, machinery_backend, machinegun))
     ]),
     ok = application:set_env(?MODULE, backends, maps:from_list(Backends)),
     RouteOptsEnv = genlib_app:env(?MODULE, route_opts, #{}),
@@ -93,19 +109,40 @@ get_api_childspecs(Opts, HealthRoutes) ->
     SwaggerServerSpec = shortener_swagger_server:child_spec(shortener_handler, Opts, HealthRouter),
     [SwaggerServerSpec].
 
-contruct_backend_childspec(NS, Handler) ->
-    Schema = get_namespace_schema(NS),
+-spec get_namespaces_params(backend_mode()) ->
+    [{backend_mode(), machinery:namespace(), Handler :: module(), Schema :: module()}].
+get_namespaces_params(machinegun = BackendMode) ->
+    [
+        {BackendMode, 'url-shortener', shortener_machine, shortener_machinery_schema}
+    ];
+get_namespaces_params(progressor = BackendMode) ->
+    {ok, Namespaces} = application:get_env(progressor, namespaces),
+    lists:map(
+        fun({_, ?PROCESSOR_OPT_PATTERN(NS, Handler, Schema)}) ->
+            {BackendMode, NS, Handler, Schema}
+        end,
+        maps:to_list(Namespaces)
+    ).
+
+contruct_backend_childspec(BackendMode, NS, Handler, Schema) ->
     {
-        construct_machinery_backend_spec(NS, Schema),
+        construct_machinery_backend_spec(BackendMode, NS, Handler, Schema),
         construct_machinery_handler_spec(NS, Handler, Schema),
         construct_machinery_modernizer_spec(NS, Schema)
     }.
 
-construct_machinery_backend_spec(NS, Schema) ->
+construct_machinery_backend_spec(machinegun, NS, _Handler, Schema) ->
     {NS,
         {machinery_mg_backend, #{
             schema => Schema,
             client => get_service_client(automaton)
+        }}};
+construct_machinery_backend_spec(progressor, NS, Handler, Schema) ->
+    {NS,
+        {machinery_prg_backend, #{
+            namespace => NS,
+            handler => {shortener_machine, #{handler => Handler}},
+            schema => Schema
         }}}.
 
 construct_machinery_handler_spec(_NS, Handler, Schema) ->
@@ -119,9 +156,6 @@ construct_machinery_modernizer_spec(_NS, Schema) ->
         path => "/v1/modernizer",
         backend_config => #{schema => Schema}
     }.
-
-get_namespace_schema('url-shortener') ->
-    shortener_machinery_schema.
 
 get_service_client(ServiceName) ->
     case maps:get(url, get_service_client_config(ServiceName), undefined) of
