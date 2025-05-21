@@ -69,7 +69,7 @@ unmarshal(T, V, C) when
 
 -spec marshal_event(machinery_mg_schema:version(), event(), context()) -> {machinery_msgpack:t(), context()}.
 marshal_event(
-    undefined,
+    _Ver,
     {ev, _EvTs,
         {created, #{
             source := Source,
@@ -82,7 +82,7 @@ marshal_event(
     {{arr, [{i, 2}, {str, Source}, {str, ExpiresAt}, {str, Owner}]}, Context}.
 
 -spec unmarshal_event(machinery_mg_schema:version(), machinery_msgpack:t(), context()) -> {event(), context()}.
-unmarshal_event(undefined, {arr, [{i, 2}, {str, Source}, {str, ExpiresAt}, {str, Owner}]}, Context) ->
+unmarshal_event(_Ver, {arr, [{i, 2}, {str, Source}, {str, ExpiresAt}, {str, Owner}]}, Context) ->
     Ts = shortener_time:machinery_now(),
     Change = {ev, Ts, {created, #{source => Source, expires_at => ExpiresAt, owner => Owner}}},
     {Change, Context}.

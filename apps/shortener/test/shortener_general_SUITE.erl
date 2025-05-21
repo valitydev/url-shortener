@@ -82,7 +82,7 @@ init_per_suite(C) ->
     Apps =
         genlib_app:start_application_with(scoper, [
             {storage, scoper_storage_logger}
-        ]),
+        ]) ++ start_progressor_backend(),
     [
         {suite_apps, Apps},
         {api_endpoint, "http://" ++ Netloc},
@@ -99,7 +99,8 @@ init_per_group(misc, C) ->
             shortener_ct_helper:get_app_config(
                 ?config(port, C),
                 ?config(netloc, C),
-                <<"http://invalid_url:8022/v1/automaton">>
+                <<"http://invalid_url:8022/v1/automaton">>,
+                progressor
             )
         ),
     [{shortener_app, ShortenerApp}] ++ C;
@@ -109,7 +110,9 @@ init_per_group(_Group, C) ->
             shortener,
             shortener_ct_helper:get_app_config(
                 ?config(port, C),
-                ?config(netloc, C)
+                ?config(netloc, C),
+                <<"http://machinegun:8022/v1/automaton">>,
+                progressor
             )
         ),
     [{shortener_app, ShortenerApp}] ++ C.
@@ -302,6 +305,7 @@ construct_params(SourceUrl, Lifetime) ->
 %%
 -spec woody_timeout_test(config()) -> _.
 woody_timeout_test(C) ->
+    _ = mock_invalid_progressor(),
     _ = shortener_ct_helper_token_keeper:mock_dumb_token(?config(test_sup, C)),
     _ = shortener_ct_helper_bouncer:mock_arbiter(
         shortener_ct_helper_bouncer:judge_always_allowed(),
@@ -310,10 +314,14 @@ woody_timeout_test(C) ->
     C2 = set_api_auth_token(C),
     SourceUrl = <<"https://example.com/">>,
     Params = construct_params(SourceUrl),
-    {Time, {error, {invalid_response_code, 503}}} =
+    % different Reason for machinegun and progressor
+    % progressor: Reason = timeout (because internal library)
+    % machinegun: Reason = {invalid_response_code, 503} (because external service)
+    {Time, {error, _Reason}} =
         timer:tc(fun() ->
             shorten_url(Params, 3 * 1000, C2)
         end),
+    _ = unmock_progressor(),
     ?assertMatch(V when V >= 3000, Time).
 
 %%
@@ -386,3 +394,77 @@ append_request_id(Params = #{header := Headers}) ->
 
 format_ts(Ts) ->
     genlib_rfc3339:format(Ts, second).
+
+start_progressor_backend() ->
+    EpgApps = start_epg_connector(),
+    PrgApps = start_progressor(),
+    EpgApps ++ PrgApps.
+
+start_epg_connector() ->
+    Config = [
+        {databases, #{
+            default_db => #{
+                host => "postgres",
+                port => 5432,
+                database => "progressor_db",
+                username => "progressor",
+                password => "progressor"
+            }
+        }},
+        {pools, #{
+            default_pool => #{
+                database => default_db,
+                size => 50
+            }
+        }}
+    ],
+    genlib_app:start_application_with(epg_connector, Config).
+
+start_progressor() ->
+    Config = [
+        {defaults, #{
+            storage => #{
+                client => prg_pg_backend,
+                options => #{
+                    pool => default_pool
+                }
+            },
+            retry_policy => #{
+                initial_timeout => 5,
+                backoff_coefficient => 1.0,
+                max_timeout => 180,
+                max_attempts => 3,
+                non_retryable_errors => []
+            },
+            task_scan_timeout => 1,
+            worker_pool_size => 1,
+            process_step_timeout => 10
+        }},
+        {namespaces, #{
+            'url-shortener' => #{
+                processor => #{
+                    client => machinery_prg_backend,
+                    options => #{
+                        namespace => 'url-shortener',
+                        handler => shortener_machine,
+                        schema => shortener_machinery_schema
+                    }
+                }
+            }
+        }}
+    ],
+    genlib_app:start_application_with(progressor, Config).
+
+mock_invalid_progressor() ->
+    meck:new(progressor, [passthrough]),
+    meck:expect(
+        progressor,
+        init,
+        fun(Args) ->
+            timer:sleep(5000),
+            meck:passthrough([Args])
+        end
+    ).
+
+unmock_progressor() ->
+    meck:unload(progressor).
