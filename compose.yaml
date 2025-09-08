@@ -13,6 +13,8 @@ services:
     hostname: $SERVICE_NAME
     working_dir: $PWD
     depends_on:
+      postgres:
+        condition: service_healthy
       machinegun:
         condition: service_healthy
     ports:
@@ -30,3 +32,31 @@ services:
       interval: 5s
       timeout: 1s
       retries: 20
+
+  postgres:
+    image: postgres:15-bookworm
+    command: -c 'max_connections=200'
+    environment:
+      POSTGRES_DB: "progressor_db"
+      POSTGRES_USER: "progressor"
+      POSTGRES_PASSWORD: "progressor"
+      PGDATA: "/tmp/postgresql/data/pgdata"
+    volumes:
+      - progressor-data:/tmp/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U progressor -d progressor_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 4G
+
+volumes:
+  progressor-data:
