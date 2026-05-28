@@ -243,19 +243,30 @@ construct_shortened_url(
 ) ->
     #{
         <<"id">> => ID,
-        <<"shortenedUrl">> => render_short_url(ID, get_short_url_template()),
+        <<"shortenedUrl">> => render_short_url(ID, get_short_url_template(), Source),
         <<"sourceUrl">> => Source,
         <<"expiresAt">> => ExpiresAt
     }.
 
-render_short_url(ID, Template) ->
+render_short_url(ID, Template, Source) ->
+    Netloc = genlib:to_binary(maps:get(netloc, Template)),
+    AuthorityMapper = maps:get(authority_mapper, Template, undefined),
     iolist_to_binary([
         genlib:to_binary(maps:get(scheme, Template)),
         <<"://">>,
-        genlib:to_binary(maps:get(netloc, Template)),
+        render_short_authority(Source, AuthorityMapper, Netloc),
         genlib:to_binary(maps:get(path, Template)),
         ID
     ]).
+
+render_short_authority(_Source, undefined, Netloc) ->
+    Netloc;
+render_short_authority(Source, auto, _Netloc) ->
+    #{host := SrcDomain} = uri_string:parse(Source),
+    unicode:characters_to_binary(SrcDomain);
+render_short_authority(Source, MapRules, Netloc) ->
+    #{host := SrcDomain} = uri_string:parse(Source),
+    unicode:characters_to_binary(maps:get(unicode:characters_to_list(SrcDomain), MapRules, Netloc)).
 
 parse_timestamp(Timestamp) ->
     Microseconds = genlib_rfc3339:parse(Timestamp, microsecond),

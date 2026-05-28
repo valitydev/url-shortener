@@ -40,14 +40,22 @@
 -spec all() -> [test_case_name() | {group, group_name()}].
 all() ->
     [
-        {group, general},
-        {group, cors},
+        {group, single_domain},
+        {group, multi_domain},
         {group, misc}
     ].
 
 -spec groups() -> [{atom(), list(), [test_case_name()]}].
 groups() ->
     [
+        {multi_domain, [], [
+            {group, general},
+            {group, cors}
+        ]},
+        {single_domain, [], [
+            {group, general},
+            {group, cors}
+        ]},
         {general, [], [
             successful_redirect,
             successful_delete,
@@ -92,6 +100,34 @@ init_per_suite(C) ->
     ] ++ C.
 
 -spec init_per_group(atom(), config()) -> config().
+init_per_group(single_domain, C) ->
+    ShortenerApp =
+        genlib_app:start_application_with(
+            shortener,
+            shortener_ct_helper:get_app_config(
+                ?config(port, C),
+                ?config(netloc, C),
+                <<"http://machinegun:8022/v1/automaton">>,
+                progressor
+            )
+        ),
+    [{shortener_app, ShortenerApp}] ++ C;
+init_per_group(multi_domain, C) ->
+    ShortenerApp =
+        genlib_app:start_application_with(
+            shortener,
+            shortener_ct_helper:get_app_config(
+                ?config(port, C),
+                ?config(netloc, C),
+                #{
+                    "oops.io" => "oops.io:8080",
+                    "example.com" => "example.com:8080"
+                },
+                <<"http://machinegun:8022/v1/automaton">>,
+                progressor
+            )
+        ),
+    [{shortener_app, ShortenerApp}] ++ C;
 init_per_group(misc, C) ->
     ShortenerApp =
         genlib_app:start_application_with(
@@ -105,21 +141,17 @@ init_per_group(misc, C) ->
         ),
     [{shortener_app, ShortenerApp}] ++ C;
 init_per_group(_Group, C) ->
-    ShortenerApp =
-        genlib_app:start_application_with(
-            shortener,
-            shortener_ct_helper:get_app_config(
-                ?config(port, C),
-                ?config(netloc, C),
-                <<"http://machinegun:8022/v1/automaton">>,
-                progressor
-            )
-        ),
-    [{shortener_app, ShortenerApp}] ++ C.
+    C.
 
 -spec end_per_group(atom(), config()) -> _.
-end_per_group(_Group, C) ->
-    genlib_app:stop_unload_applications(?config(shortener_app, C)).
+end_per_group(Group, C) when
+    Group =:= single_domain;
+    Group =:= multi_domain;
+    Group =:= misc
+->
+    genlib_app:stop_unload_applications(?config(shortener_app, C));
+end_per_group(_Group, _C) ->
+    ok.
 
 -spec end_per_suite(config()) -> term().
 end_per_suite(C) ->

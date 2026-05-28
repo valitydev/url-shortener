@@ -12,6 +12,7 @@
 -export([get_app_config/2]).
 -export([get_app_config/3]).
 -export([get_app_config/4]).
+-export([get_app_config/5]).
 -export([get_bouncer_client_app_config/0]).
 
 -type config() :: [{atom(), any()}].
@@ -108,6 +109,10 @@ get_app_config(Port, Netloc, AutomatonUrl) ->
 
 -spec get_app_config(_, _, _, _) -> _.
 get_app_config(Port, Netloc, AutomatonUrl, MachineryBackend) ->
+    get_app_config(Port, Netloc, undefined, AutomatonUrl, MachineryBackend).
+
+-spec get_app_config(_, _, _, _, _) -> _.
+get_app_config(Port, Netloc, AuthorityMapper, AutomatonUrl, MachineryBackend) ->
     [
         {machinery_backend, MachineryBackend},
         {bouncer_ruleset_id, <<"service/authz/api">>},
@@ -123,6 +128,7 @@ get_app_config(Port, Netloc, AutomatonUrl, MachineryBackend) ->
             ],
             short_url_template => #{
                 scheme => http,
+                authority_mapper => AuthorityMapper,
                 netloc => Netloc,
                 path => "/r/e/d/i/r/"
             }
