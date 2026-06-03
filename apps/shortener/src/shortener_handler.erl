@@ -251,31 +251,33 @@ construct_shortened_url(
 render_short_url(ID, Template, Source) ->
     Netloc = genlib:to_binary(maps:get(netloc, Template)),
     AuthorityMapper = maps:get(authority_mapper, Template, undefined),
+    Prefix = maps:get(prefix, Template, "shrt"),
     iolist_to_binary([
         genlib:to_binary(maps:get(scheme, Template)),
         <<"://">>,
-        render_short_authority(Source, AuthorityMapper, Netloc),
+        render_short_authority(Source, AuthorityMapper, Prefix, Netloc),
         genlib:to_binary(maps:get(path, Template)),
         ID
     ]).
 
-render_short_authority(_Source, undefined, Netloc) ->
+render_short_authority(_Source, undefined, _Prefix, Netloc) ->
     Netloc;
-render_short_authority(Source, auto, _Netloc) ->
+render_short_authority(Source, auto, Prefix, _Netloc) ->
     #{host := SrcDomain} = uri_string:parse(Source),
+    BinPrefix = unicode:characters_to_binary(Prefix),
     Splited = binary:split(SrcDomain, <<".">>, [global]),
     case Splited of
         [_] ->
             %% short hostname
-            <<"shrt.", SrcDomain/binary>>;
+            <<BinPrefix/binary, ".", SrcDomain/binary>>;
         [_, _] ->
             %% only second level and top level domains
-            <<"shrt.", SrcDomain/binary>>;
+            <<BinPrefix/binary, ".", SrcDomain/binary>>;
         [_ | Tail] ->
             Dotted = [[<<".">>, W] || W <- Tail],
-            iolist_to_binary([<<"shrt">> | Dotted])
+            iolist_to_binary([BinPrefix | Dotted])
     end;
-render_short_authority(Source, MapRules, Netloc) ->
+render_short_authority(Source, MapRules, _Prefix, Netloc) ->
     #{host := SrcDomain} = uri_string:parse(Source),
     unicode:characters_to_binary(maps:get(unicode:characters_to_list(SrcDomain), MapRules, Netloc)).
 
