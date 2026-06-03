@@ -272,7 +272,7 @@ render_short_authority(Source, auto, _Netloc) ->
             %% only second level and top level domains
             <<"shrt.", SrcDomain/binary>>;
         [_ | Tail] ->
-            Dotted = [[<<".">> | W] || W <- Tail],
+            Dotted = [[<<".">>, W] || W <- Tail],
             iolist_to_binary([<<"shrt">> | Dotted])
     end;
 render_short_authority(Source, MapRules, Netloc) ->
