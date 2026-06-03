@@ -263,7 +263,18 @@ render_short_authority(_Source, undefined, Netloc) ->
     Netloc;
 render_short_authority(Source, auto, _Netloc) ->
     #{host := SrcDomain} = uri_string:parse(Source),
-    unicode:characters_to_binary(SrcDomain);
+    Splited = binary:split(SrcDomain, <<".">>, [global]),
+    case Splited of
+        [_] ->
+            %% short hostname
+            <<"shrt.", SrcDomain/binary>>;
+        [_, _] ->
+            %% only second level and top level domains
+            <<"shrt.", SrcDomain/binary>>;
+        [_ | Tail] ->
+            Dotted = [[<<".">>, W] || W <- Tail],
+            iolist_to_binary([<<"shrt">> | Dotted])
+    end;
 render_short_authority(Source, MapRules, Netloc) ->
     #{host := SrcDomain} = uri_string:parse(Source),
     unicode:characters_to_binary(maps:get(unicode:characters_to_list(SrcDomain), MapRules, Netloc)).
